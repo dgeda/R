@@ -1,0 +1,388 @@
+---
+title: "Google Data Analytics Cerficate Capstone Project"
+author: "Daniel Geda"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Case Study 1: How Does a Bike-Share Navigate Speedy Success?
+
+This project was part of my Google Data Analytics Certificate capstone project. 
+
+Here's the scenario: We are working with a fictional company, Cyclistic, which is a bike-share company in Chicago. The director of marketing believes the company’s future success depends on maximizing the number of annual memberships. Therefore, our team wants to understand how casual riders and annual members use Cyclistic bikes differently. From these insights, the marketing team will design a new marketing strategy to convert casual riders into annual members.
+
+Specific Question: How do annual members and casual riders use Cyclistic bikes differently?
+
+Data source: Cyclistic’s historical trip data The data has been made available by Motivate International Inc. under this license (https://divvybikes.com/data-license-agreement).I am using the trip data from the 4 quarters in 2019.
+
+
+# Load R libraries
+
+```{r}
+library(tidyverse)
+library(tidyr)
+library(readr)
+library(lubridate)
+library(ggplot2)
+```
+
+# Load data into R
+
+```{r}
+Q1_2019 <- read_csv("Divvy_Trips_2019_Q1.csv")
+Q2_2019 <- read_csv("Divvy_Trips_2019_Q2.csv")
+Q3_2019 <- read_csv("Divvy_Trips_2019_Q3.csv")
+Q4_2019 <- read_csv("Divvy_Trips_2019_Q4.csv")
+```
+
+# Look at the column names for the four quarters to make sure there are no dsicrepencies
+
+```{r}
+colnames(Q1_2019)
+colnames(Q2_2019)
+colnames(Q3_2019)
+colnames(Q4_2019)
+```
+
+# Rename Q2_2019 columns to make them consisent with the rest of the quarters
+
+```{r}
+Q2_2019 <- rename(Q2_2019
+                  ,trip_id = "01 - Rental Details Rental ID"
+                  ,start_time = "01 - Rental Details Local Start Time"
+                  ,end_time = "01 - Rental Details Local End Time"
+                  ,bikeid = "01 - Rental Details Bike ID"
+                  ,tripduration = "01 - Rental Details Duration In Seconds Uncapped"
+                  ,from_station_id = "03 - Rental Start Station ID" 
+                  ,from_station_name = "03 - Rental Start Station Name"
+                  ,to_station_id = "02 - Rental End Station ID"
+                  ,to_station_name = "02 - Rental End Station Name"
+                  ,usertype = "User Type"
+                  ,gender = "Member Gender"
+                  ,birthyear = "05 - Member Details Member Birthday Year")
+
+```
+
+# Check if renaming was successful and do a double check using str() and colnames()
+
+```{r}
+str(Q1_2019)
+str(Q2_2019)
+str(Q3_2019)
+str(Q4_2019)
+
+colnames(Q1_2019)
+colnames(Q2_2019)
+colnames(Q3_2019)
+colnames(Q4_2019)
+```
+
+# Combine the quarterly data into one dataset for the entire year
+
+```{r}
+all_2019 <- bind_rows(Q1_2019, Q2_2019, Q3_2019, Q4_2019)
+```
+
+# Use the summary() function to visually inspect the joined dataset
+
+```{r}
+summary(all_2019)
+dim(all_2019)
+```
+```{r}
+all_2019 <-  all_2019 %>% 
+  mutate(usertype = recode(usertype
+                           ,"Subscriber" = "member"
+                           ,"Customer" = "casual"))
+
+```
+
+# Use graphics to check the contents in the usertype column
+
+```{r}
+ggplot(all_2019, aes(x = usertype, fill = usertype)) +
+  geom_bar(color = "white", position = "stack", show.legend = FALSE) +
+  geom_text(stat = "count", aes(label = stat(count)),
+            position = position_stack(vjust = 1.04), size = 5) +  
+  labs(title = "Distribution of User Types",
+       subtitle = "Data from 2019",
+       x = "User Type",
+       y = "Count") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
+        text = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 14),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12, color = "black")) +
+  scale_fill_manual(values = c("#3498db", "#e74c3c")) +  
+  scale_y_continuous(labels = scales::number_format(scale = 1e-6, suffix = "M"))
+```
+
+```{r}
+
+df <- all_2019 %>% 
+  group_by(usertype) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(perc = `n` / sum(`n`)) %>% 
+  arrange(perc) %>%
+  mutate(labels = scales::percent(perc))
+
+ggplot(df, aes(x = "", y = perc, fill = usertype)) +
+  geom_col() +
+  geom_label(aes(label = labels),
+             position = position_stack(vjust = 0.5),
+             show.legend = FALSE) +
+  labs(title = "Distribution of User Types",
+       subtitle = "Data from 2019",
+       x = "",
+       y = "") +
+  coord_polar(theta = "y")+
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_blank(),
+        text = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 14),
+        axis.title = element_blank(),
+        axis.text = element_blank()) +
+  scale_fill_manual(values = c("#3498db", "#e74c3c"))
+
+
+
+```
+
+# Add columns that list the date, month, day, and year of each ride
+### This will allow us to aggregate ride data for each month, day, or year 
+
+```{r}
+all_2019$date <- as.Date(all_2019$start_time) #The default format is yyyy-mm-dd
+all_2019$month <- format(as.Date(all_2019$date), "%m")
+all_2019$day <- format(as.Date(all_2019$date), "%d")
+all_2019$year <- format(as.Date(all_2019$date), "%Y")
+all_2019$day_of_week <- format(as.Date(all_2019$date), "%A")
+```
+
+# Descriptive analysis on ride_length (all figures in seconds)
+
+```{r}
+summary(all_2019$tripduration)
+```
+
+# Compare members and casual users
+
+
+```{r}
+summary_stats <- all_2019 %>%
+  group_by(usertype) %>%
+  summarize(mean_duration = mean(tripduration),
+            median_duration = median(tripduration),
+            max_duration = max(tripduration),
+            min_duration = min(tripduration))
+
+
+print(summary_stats)
+```
+```{r}
+
+ggplot(all_2019, aes(x = usertype, y = tripduration, fill = usertype)) +
+  geom_boxplot(show.legend = FALSE) +
+  geom_text(data = summary_stats,
+            aes(x = usertype, y = mean_duration, label = sprintf("Mean: %.2f", mean_duration)),
+            vjust = -0.3, hjust = 0.5, color = "black") +
+  geom_text(data = summary_stats,
+            aes(x = usertype, y = median_duration, label = sprintf("Median: %.2f", median_duration)),
+            vjust = 1.2, hjust = 0.5, color = "black") +
+  geom_text(data = summary_stats,
+            aes(x = usertype, y = max_duration, label = sprintf("Max: %.2f", max_duration)),
+            vjust = -0.3, hjust = 1.1, color = "black") +
+  geom_text(data = summary_stats,
+            aes(x = usertype, y = min_duration, label = sprintf("Min: %.2f", min_duration)),
+            vjust = 1.2, hjust = 1.5, color = "black") +
+  labs(title = "Trip Duration by User Type",
+       x = "User Type",
+       y = "Trip Duration (log10 Scale)") +
+  scale_y_log10() +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
+        text = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12, color = "black"))
+```
+# Looking at ridership by month and gender distribution
+
+```{r}
+rides_by_month <- all_2019 %>% 
+  group_by(month) %>% 
+  summarise(number_of_rides = n())
+
+ggplot(rides_by_month, aes(x = month, y = number_of_rides, group = 1)) +
+  geom_line(color = "#3498db", size = 1.5) +
+  geom_point(color = "#3498db", size = 3) +
+  labs(title = "Number of Rides by Month",
+       x = "Month",
+       y = "Number of Rides") +
+  scale_x_discrete(labels = month.abb) +
+  theme_minimal() +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
+        text = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5, size = 14),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12, color = "black")) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
+  scale_y_continuous(labels = scales::number_format(scale = 1e-3, suffix = "K"))
+
+
+
+```
+
+
+```{r}
+ggplot(all_2019, aes(x = gender, fill = usertype)) +
+  geom_bar() +
+  labs(title = "Count of Trips by User Type and Gender", x = "Gender", y = "Count", fill = "User Type") +
+  theme_minimal()+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
+        text = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12, color = "black"),
+        legend.position = "right") +
+  scale_fill_manual(values = c("#3498db", "#e74c3c")) +
+  scale_y_continuous(labels = scales::number_format(scale = 1e-6, suffix = "M"))
+  
+```
+
+
+
+
+### See the average ride time by each day for members vs casual users
+```{r}
+aggregate(all_2019$tripduration ~ all_2019$usertype + all_2019$day_of_week, FUN = mean)
+```
+
+
+# Ordering days of the week
+
+```{r}
+all_2019$day_of_week <- ordered(all_2019$day_of_week, levels=c( "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+aggregate(all_2019$tripduration ~ all_2019$usertype + all_2019$day_of_week, FUN = mean)
+```
+
+# Analyze ridership data by type and weekday
+
+```{r}
+all_2019 %>%
+  mutate(weekday = wday(start_time, label = TRUE)) %>%  
+  group_by(usertype, weekday) %>%  
+  summarise(number_of_rides = n(),average_duration = mean(tripduration)) %>% 
+  arrange(usertype, weekday)
+
+```
+
+# Visualize the number of rides by rider type
+
+```{r}
+
+all_2019 %>% 
+  mutate(weekday = wday(start_time, label = TRUE)) %>% 
+  group_by(usertype, weekday) %>% 
+  summarise(number_of_rides = n(), average_duration = mean(tripduration)) %>% 
+  arrange(usertype, weekday) %>% 
+  ggplot(aes(x = weekday, y = number_of_rides, fill = usertype)) +
+  geom_col(position = "dodge", color = "white", size = 0.5) +
+  labs(title = "Number of Rides by User Type and Weekday",
+       x = "Weekday",
+       y = "Number of Rides",
+       fill = "User Type") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
+        text = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12, color = "black"),
+        legend.position = "right") +
+  scale_fill_manual(values = c("#3498db", "#e74c3c")) +
+  scale_y_continuous(labels = scales::number_format(scale = 1e-3, suffix = "K"))
+
+```
+
+# Let's create a visualization for average duration
+
+```{r}
+all_2019 %>% 
+  mutate(weekday = wday(start_time, label = TRUE)) %>% 
+  group_by(usertype, weekday) %>% 
+  summarise(number_of_rides = n(), average_duration = mean(tripduration)) %>% 
+  arrange(usertype, weekday) %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = usertype)) +
+  geom_col(position = "dodge", color = "white", size = 0.5) +
+  labs(title = "Trip Duration by User Type and Weekday",
+       x = "Weekday",
+       y = "Avg. Trip Duration (sec)",
+       fill = "User Type") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
+        text = element_text(size = 12),
+        plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12, color = "black"),
+        legend.position = "right") +
+  scale_fill_manual(values = c("#3498db", "#e74c3c")) 
+
+
+```
+
+# Do statistical test to see if the difference in tripduration is significance 
+
+
+```{r}
+user_type1_data <- all_2019$tripduration[all_2019$usertype == "member"]
+user_type2_data <- all_2019$tripduration[all_2019$usertype == "casual"]
+
+t_test_result <- t.test(user_type1_data, user_type2_data)
+
+print(t_test_result)
+
+```
+
+# Final observation 
+
+## Based our analysis we see that while casual customers use bikes for a longer duration, subscribing members average more daily number of rides, especially on weekdays.
+## Some suggetsions: 
+* Highlight perks such as unlimited rides, exclusive discounts, and priority access to bikes.
+* Emphasize the higher daily number of rides that members enjoy, especially on weekdays, showcasing the value of membership for frequent users.
+* Offer special promotions or discounted membership rates for casual riders who have a history of longer-duration rides. This can act as an incentive for them to subscribe, considering their extended usage pattern.
+
+
+
